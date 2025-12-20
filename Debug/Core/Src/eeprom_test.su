@@ -1,3 +1,0 @@
-../Core/Src/eeprom_test.c:31:19:EEPROM_Write	40	static
-../Core/Src/eeprom_test.c:59:19:EEPROM_Read	32	static
-../Core/Src/eeprom_test.c:81:6:EEPROM_Test	8	static

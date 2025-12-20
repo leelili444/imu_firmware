@@ -68,9 +68,17 @@ void Error_Handler(void);
 #define IMU_CS_GPIO_Port GPIOB
 #define IMU_LSE_Pin GPIO_PIN_11
 #define IMU_LSE_GPIO_Port GPIOB
+#define Serial_TX_Pin GPIO_PIN_9
+#define Serial_TX_GPIO_Port GPIOA
+#define Serial_RX_Pin GPIO_PIN_10
+#define Serial_RX_GPIO_Port GPIOA
+#define I2C_SCL_Pin GPIO_PIN_8
+#define I2C_SCL_GPIO_Port GPIOB
+#define I2C_SDA_Pin GPIO_PIN_9
+#define I2C_SDA_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
-
+uint32_t GetTimeUS_TIM(void);
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

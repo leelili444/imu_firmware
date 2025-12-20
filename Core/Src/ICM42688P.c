@@ -6,9 +6,9 @@
  */
 
 #include "ICM42688P.h"
-
+extern TIM_HandleTypeDef htim1;
 extern SPI_HandleTypeDef hspi1;
-ICM42688P_Data_t rawImuData;
+ICM42688P_Data_t imudata;
 uint8_t buf[15];
 
 
@@ -137,7 +137,7 @@ uint8_t ICM42688P_read_dma(void)
     HAL_SPI_TransmitReceive_DMA(&hspi1, tx_buf, buf, 15);
     return 1;
 }
-
+uint16_t last_count = 0;
 uint8_t ICM42688P_decode(ICM42688P_Data_t *data){
 
 	data->temperature_C = ICM42688P_ConvertTemp((int16_t)((buf[1] << 8) | buf[2]));
@@ -149,6 +149,21 @@ uint8_t ICM42688P_decode(ICM42688P_Data_t *data){
     data->gyro_y = ICM42688P_ConvertGyro((int16_t)((buf[11] << 8) | buf[12]),ICM42688P_GYRO_500DPS_SENSITIVITY);
     data->gyro_z = ICM42688P_ConvertGyro((int16_t)((buf[13] << 8) | buf[14]),ICM42688P_GYRO_500DPS_SENSITIVITY);
 
+    // 1. 立即读取当前计数值
+    uint16_t current_count = __HAL_TIM_GET_COUNTER(&htim1);
+    uint16_t delta_us = 0;
+    // 2. 计算差值（考虑 16 位计数器溢出回环的情况）
+    if (current_count >= last_count) {
+    	delta_us = current_count - last_count;
+    } else {
+        // 发生溢出回环：(最大值 - 上一次) + 当前值 + 1
+        delta_us = (0xFFFF - last_count) + current_count + 1;
+    }
+
+    // 3. 更新上一次的值，供下次使用
+    last_count = current_count;
+
+    data->dt = delta_us;
     return 1;
 }
 
@@ -157,7 +172,7 @@ uint8_t ICM42688P_GetData(ICM42688P_Data_t *data) {
 
     //ICM42688P_ReadRegs(MPUREG_TEMP_DATA0_UI, buf, 14);
 
-	ICM42688P_decode(&rawImuData);
+	ICM42688P_decode(&imudata);
     return 1;
 }
 

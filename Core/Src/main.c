@@ -22,16 +22,19 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "eeprom_test.h"
 #include "ICM42688P.h"
-extern ICM42688P_Data_t rawImuData;
+#include "ins_task.h"
+#include "mav_task.h"
+#include "queue.h"
 
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+extern FusionEuler euler;
+extern ICM42688P_Data_t imudata;
+extern uint8_t mavlink_tx_buffer[MAVLINK_MAX_PACKET_LEN];
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -45,7 +48,7 @@ extern ICM42688P_Data_t rawImuData;
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-CAN_HandleTypeDef hcan2;
+CAN_HandleTypeDef hcan1;
 
 I2C_HandleTypeDef hi2c1;
 
@@ -53,12 +56,45 @@ SPI_HandleTypeDef hspi1;
 DMA_HandleTypeDef hdma_spi1_rx;
 DMA_HandleTypeDef hdma_spi1_tx;
 
+TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim8;
+
+UART_HandleTypeDef huart1;
+DMA_HandleTypeDef hdma_usart1_rx;
+DMA_HandleTypeDef hdma_usart1_tx;
+
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for imuTask */
+osThreadId_t imuTaskHandle;
+const osThreadAttr_t imuTask_attributes = {
+  .name = "imuTask",
+  .stack_size = 1024 * 4,
+  .priority = (osPriority_t) osPriorityRealtime,
+};
+/* Definitions for insTask */
+osThreadId_t insTaskHandle;
+const osThreadAttr_t insTask_attributes = {
+  .name = "insTask",
+  .stack_size = 1024 * 4,
+  .priority = (osPriority_t) osPriorityHigh,
+};
+/* Definitions for mavTask */
+osThreadId_t mavTaskHandle;
+const osThreadAttr_t mavTask_attributes = {
+  .name = "mavTask",
+  .stack_size = 1024 * 4,
+  .priority = (osPriority_t) osPriorityAboveNormal,
+};
+/* Definitions for imuQue */
+osMessageQueueId_t imuQueHandle;
+const osMessageQueueAttr_t imuQue_attributes = {
+  .name = "imuQue"
 };
 /* USER CODE BEGIN PV */
 
@@ -70,8 +106,14 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
-static void MX_CAN2_Init(void);
+static void MX_USART1_UART_Init(void);
+static void MX_CAN1_Init(void);
+static void MX_TIM8_Init(void);
+static void MX_TIM1_Init(void);
 void StartDefaultTask(void *argument);
+void StartImuTask(void *argument);
+void StartInsTask(void *argument);
+void StartMavTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -114,8 +156,13 @@ int main(void)
   MX_DMA_Init();
   MX_I2C1_Init();
   MX_SPI1_Init();
-  MX_CAN2_Init();
+  MX_USART1_UART_Init();
+  MX_CAN1_Init();
+  MX_TIM8_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+  ICM42688P_Init();
+
 
   /* USER CODE END 2 */
 
@@ -132,7 +179,13 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_TIMERS */
   /* start timers, add new ones, ... */
+  HAL_TIM_Base_Start(&htim1);
+  //HAL_TIM_Base_Start_IT(&htim8);
   /* USER CODE END RTOS_TIMERS */
+
+  /* Create the queue(s) */
+  /* creation of imuQue */
+  imuQueHandle = osMessageQueueNew (16, sizeof(uint16_t), &imuQue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -140,7 +193,16 @@ int main(void)
 
   /* Create the thread(s) */
   /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  //defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+
+  /* creation of imuTask */
+  imuTaskHandle = osThreadNew(StartImuTask, NULL, &imuTask_attributes);
+
+  /* creation of insTask */
+  insTaskHandle = osThreadNew(StartInsTask, NULL, &insTask_attributes);
+
+  /* creation of mavTask */
+  mavTaskHandle = osThreadNew(StartMavTask, NULL, &mavTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -163,11 +225,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  // 1. 翻转电平：如果当前是高电平则变低，反之亦然
-	      HAL_GPIO_TogglePin(GPIOA, LED_Red_Pin);
-
-	      // 2. 延时：单位为毫秒 (ms)，这里设置 500ms 闪烁一次
-	      HAL_Delay(500);
   }
   /* USER CODE END 3 */
 }
@@ -218,39 +275,39 @@ void SystemClock_Config(void)
 }
 
 /**
-  * @brief CAN2 Initialization Function
+  * @brief CAN1 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_CAN2_Init(void)
+static void MX_CAN1_Init(void)
 {
 
-  /* USER CODE BEGIN CAN2_Init 0 */
+  /* USER CODE BEGIN CAN1_Init 0 */
 
-  /* USER CODE END CAN2_Init 0 */
+  /* USER CODE END CAN1_Init 0 */
 
-  /* USER CODE BEGIN CAN2_Init 1 */
+  /* USER CODE BEGIN CAN1_Init 1 */
 
-  /* USER CODE END CAN2_Init 1 */
-  hcan2.Instance = CAN2;
-  hcan2.Init.Prescaler = 16;
-  hcan2.Init.Mode = CAN_MODE_NORMAL;
-  hcan2.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan2.Init.TimeSeg1 = CAN_BS1_1TQ;
-  hcan2.Init.TimeSeg2 = CAN_BS2_1TQ;
-  hcan2.Init.TimeTriggeredMode = DISABLE;
-  hcan2.Init.AutoBusOff = DISABLE;
-  hcan2.Init.AutoWakeUp = DISABLE;
-  hcan2.Init.AutoRetransmission = DISABLE;
-  hcan2.Init.ReceiveFifoLocked = DISABLE;
-  hcan2.Init.TransmitFifoPriority = DISABLE;
-  if (HAL_CAN_Init(&hcan2) != HAL_OK)
+  /* USER CODE END CAN1_Init 1 */
+  hcan1.Instance = CAN1;
+  hcan1.Init.Prescaler = 16;
+  hcan1.Init.Mode = CAN_MODE_NORMAL;
+  hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
+  hcan1.Init.TimeSeg1 = CAN_BS1_1TQ;
+  hcan1.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan1.Init.TimeTriggeredMode = DISABLE;
+  hcan1.Init.AutoBusOff = DISABLE;
+  hcan1.Init.AutoWakeUp = DISABLE;
+  hcan1.Init.AutoRetransmission = DISABLE;
+  hcan1.Init.ReceiveFifoLocked = DISABLE;
+  hcan1.Init.TransmitFifoPriority = DISABLE;
+  if (HAL_CAN_Init(&hcan1) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN CAN2_Init 2 */
+  /* USER CODE BEGIN CAN1_Init 2 */
 
-  /* USER CODE END CAN2_Init 2 */
+  /* USER CODE END CAN1_Init 2 */
 
 }
 
@@ -327,6 +384,132 @@ static void MX_SPI1_Init(void)
 }
 
 /**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 167;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 65535;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+
+  /* USER CODE END TIM1_Init 2 */
+
+}
+
+/**
+  * @brief TIM8 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM8_Init(void)
+{
+
+  /* USER CODE BEGIN TIM8_Init 0 */
+
+  /* USER CODE END TIM8_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM8_Init 1 */
+
+  /* USER CODE END TIM8_Init 1 */
+  htim8.Instance = TIM8;
+  htim8.Init.Prescaler = 167;
+  htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim8.Init.Period = 999;
+  htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim8.Init.RepetitionCounter = 0;
+  htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim8, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim8, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM8_Init 2 */
+
+  /* USER CODE END TIM8_Init 2 */
+
+}
+
+/**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 1500000;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
   * Enable DMA controller clock
   */
 static void MX_DMA_Init(void)
@@ -339,9 +522,15 @@ static void MX_DMA_Init(void)
   /* DMA2_Stream0_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+  /* DMA2_Stream2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
   /* DMA2_Stream3_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream3_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream3_IRQn);
+  /* DMA2_Stream7_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream7_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream7_IRQn);
 
 }
 
@@ -361,7 +550,6 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOC_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LED_Red_GPIO_Port, LED_Red_Pin, GPIO_PIN_SET);
@@ -370,7 +558,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(LED_Green_GPIO_Port, LED_Green_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, IMU_CS_Pin|IMU_LSE_Pin|GPIO_PIN_5, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, IMU_CS_Pin|IMU_LSE_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : LED_Red_Pin LED_Green_Pin */
   GPIO_InitStruct.Pin = LED_Red_Pin|LED_Green_Pin;
@@ -385,28 +573,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(IMU_INT1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : IMU_CS_Pin IMU_LSE_Pin PB5 */
-  GPIO_InitStruct.Pin = IMU_CS_Pin|IMU_LSE_Pin|GPIO_PIN_5;
+  /*Configure GPIO pins : IMU_CS_Pin IMU_LSE_Pin */
+  GPIO_InitStruct.Pin = IMU_CS_Pin|IMU_LSE_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PA9 PA10 PA11 */
-  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  GPIO_InitStruct.Alternate = GPIO_AF1_TIM1;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PC10 PC11 */
-  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_11;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF8_UART4;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI4_IRQn, 5, 0);
@@ -422,15 +594,30 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
   if (hspi->Instance == SPI1) {
     //BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     Icm_CS_HIGH();
-    //imu_decode(&rawImuData);
+    ICM42688P_decode(&imudata);
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+    if(insTaskHandle != NULL){
+        vTaskNotifyGiveFromISR(insTaskHandle, &xHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
+
+    // 释放信号量
+    //xSemaphoreGiveFromISR(xImuDataReadySemaphore, &xHigherPriorityTaskWoken);
+    //portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
   }
 }
 // 当 HAL_GPIO_EXTI_IRQHandler() 函数检测到中断后，会调用此回调
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
     if (GPIO_Pin == GPIO_PIN_4) // PB0 = INT1
     {
-    	ICM42688P_GetData(&rawImuData);
+        if(imuTaskHandle != NULL){
+        	vTaskNotifyGiveFromISR(imuTaskHandle, &xHigherPriorityTaskWoken);
+            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+        }
 
     }
 }
@@ -446,15 +633,66 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
-	ICM42688P_Init();
-  /* Infinite loop */
-  for(;;)
-  {
-	  HAL_GPIO_TogglePin(GPIOA, LED_Green_Pin);
-      osDelay(200);
 
-  }
   /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartImuTask */
+/**
+* @brief Function implementing the imuTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartImuTask */
+void StartImuTask(void *argument)
+{
+  /* USER CODE BEGIN StartImuTask */
+	  /* Infinite loop */
+		for (;;) {
+			// --- 1. 等待中断通知 ---
+		    // ulTaskNotifyTake(pdTRUE, portMAX_DELAY) 会让任务阻塞在这里，
+		    // 直到被中断服务函数 (EXTI_IMU_Handler) 的 vTaskNotifyGiveFromISR() 唤醒。
+		    // pdTRUE 参数表示在唤醒后自动清除通知计数。
+		    // portMAX_DELAY 表示无限期等待，直到收到通知。
+			ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+	        // --- 2. 收到通知，立即读取原始数据 ---
+			ICM42688P_read_dma();
+		    }
+  /* USER CODE END StartImuTask */
+}
+
+/* USER CODE BEGIN Header_StartInsTask */
+/**
+* @brief Function implementing the insTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartInsTask */
+void StartInsTask(void *argument)
+{
+  /* USER CODE BEGIN StartInsTask */
+	InitializePose();
+	/* Infinite loop */
+	for(;;){
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		GetPose(&imudata);
+        xQueueSend(imuQueHandle, &euler.angle, 0);
+	}
+  /* USER CODE END StartInsTask */
+}
+
+/* USER CODE BEGIN Header_StartMavTask */
+/**
+* @brief Function implementing the mavTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartMavTask */
+void StartMavTask(void *argument)
+{
+  /* USER CODE BEGIN StartMavTask */
+	mavlinkTask(argument);
+  /* USER CODE END StartMavTask */
 }
 
 /**
