@@ -34,7 +34,6 @@
 /* USER CODE BEGIN PTD */
 extern FusionEuler euler;
 extern ICM42688P_Data_t imudata;
-extern uint8_t mavlink_tx_buffer[MAVLINK_MAX_PACKET_LEN];
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -49,6 +48,8 @@ extern uint8_t mavlink_tx_buffer[MAVLINK_MAX_PACKET_LEN];
 
 /* Private variables ---------------------------------------------------------*/
 CAN_HandleTypeDef hcan1;
+
+CRC_HandleTypeDef hcrc;
 
 I2C_HandleTypeDef hi2c1;
 
@@ -110,6 +111,7 @@ static void MX_USART1_UART_Init(void);
 static void MX_CAN1_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_TIM1_Init(void);
+static void MX_CRC_Init(void);
 void StartDefaultTask(void *argument);
 void StartImuTask(void *argument);
 void StartInsTask(void *argument);
@@ -160,6 +162,7 @@ int main(void)
   MX_CAN1_Init();
   MX_TIM8_Init();
   MX_TIM1_Init();
+  MX_CRC_Init();
   /* USER CODE BEGIN 2 */
   ICM42688P_Init();
 
@@ -308,6 +311,32 @@ static void MX_CAN1_Init(void)
   /* USER CODE BEGIN CAN1_Init 2 */
 
   /* USER CODE END CAN1_Init 2 */
+
+}
+
+/**
+  * @brief CRC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CRC_Init(void)
+{
+
+  /* USER CODE BEGIN CRC_Init 0 */
+
+  /* USER CODE END CRC_Init 0 */
+
+  /* USER CODE BEGIN CRC_Init 1 */
+
+  /* USER CODE END CRC_Init 1 */
+  hcrc.Instance = CRC;
+  if (HAL_CRC_Init(&hcrc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CRC_Init 2 */
+
+  /* USER CODE END CRC_Init 2 */
 
 }
 

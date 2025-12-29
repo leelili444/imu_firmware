@@ -1,15 +1,37 @@
 #ifndef __MAV_TASK_H__
 #define __MAV_TASK_H__
 
-#include <common/mavlink.h>
 #include "time.h"
 #include "stm32f4xx_hal.h"
-void mavlink_scheduler_add_task(uint8_t msg_id, uint32_t interval_ms);
-void mavlink_send_heartbeat(void);
-void mavlink_send_attitude(void);
-void mavlink_send_param(mavlink_message_t *const msg,int idx);
+#include <stdint.h>
 
-void SendToPC(UART_HandleTypeDef *huart);
+// 强制 4 字节对齐
+#pragma pack(push, 4)
+typedef struct {
+    uint16_t header;      // 0x55AA
+    uint8_t  msg_id;      // 0x01
+    uint8_t  data_len;    // 36 (负载长度)
+
+    // 数据负载 (36 字节)
+    float  ax;
+    float  ay;
+    float  az;
+
+    float  gx;
+    float  gy;
+    float  gz;
+
+    float    roll;
+    float    pitch;
+    float    yaw;
+
+    uint32_t crc32;       // 硬件 CRC32 校验码
+} IMU_Frame_t;
+#pragma pack(pop)
+
+
+
+
 void mavlinkTask(void *argument);
 void mavlink_send_param_value(UART_HandleTypeDef *huart, int idx);
 #endif /* __MAV_TASK_H__ */

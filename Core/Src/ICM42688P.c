@@ -160,6 +160,7 @@ uint8_t ICM42688P_decode(ICM42688P_Data_t *data){
         delta_us = (0xFFFF - last_count) + current_count + 1;
     }
 
+
     // 3. 更新上一次的值，供下次使用
     last_count = current_count;
 

@@ -153,6 +153,51 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* hcan)
 }
 
 /**
+  * @brief CRC MSP Initialization
+  * This function configures the hardware resources used in this example
+  * @param hcrc: CRC handle pointer
+  * @retval None
+  */
+void HAL_CRC_MspInit(CRC_HandleTypeDef* hcrc)
+{
+  if(hcrc->Instance==CRC)
+  {
+    /* USER CODE BEGIN CRC_MspInit 0 */
+
+    /* USER CODE END CRC_MspInit 0 */
+    /* Peripheral clock enable */
+    __HAL_RCC_CRC_CLK_ENABLE();
+    /* USER CODE BEGIN CRC_MspInit 1 */
+
+    /* USER CODE END CRC_MspInit 1 */
+
+  }
+
+}
+
+/**
+  * @brief CRC MSP De-Initialization
+  * This function freeze the hardware resources used in this example
+  * @param hcrc: CRC handle pointer
+  * @retval None
+  */
+void HAL_CRC_MspDeInit(CRC_HandleTypeDef* hcrc)
+{
+  if(hcrc->Instance==CRC)
+  {
+    /* USER CODE BEGIN CRC_MspDeInit 0 */
+
+    /* USER CODE END CRC_MspDeInit 0 */
+    /* Peripheral clock disable */
+    __HAL_RCC_CRC_CLK_DISABLE();
+    /* USER CODE BEGIN CRC_MspDeInit 1 */
+
+    /* USER CODE END CRC_MspDeInit 1 */
+  }
+
+}
+
+/**
   * @brief I2C MSP Initialization
   * This function configures the hardware resources used in this example
   * @param hi2c: I2C handle pointer
@@ -457,7 +502,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     hdma_usart1_tx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
     hdma_usart1_tx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
     hdma_usart1_tx.Init.Mode = DMA_NORMAL;
-    hdma_usart1_tx.Init.Priority = DMA_PRIORITY_MEDIUM;
+    hdma_usart1_tx.Init.Priority = DMA_PRIORITY_HIGH;
     hdma_usart1_tx.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
     if (HAL_DMA_Init(&hdma_usart1_tx) != HAL_OK)
     {
