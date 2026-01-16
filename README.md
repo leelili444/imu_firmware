@@ -3,7 +3,7 @@
 STM32F4 + ICM-42688P IMU firmware.
 
 ## Overview
-This project implements STM32F4 support for the ICM-42688P sensor, runs AHRS/INS algorithms, and sends telemetry at 1 kHz.
+This project implements STM32F4 support for the ICM-42688P sensor, runs AHRS/INS algorithms, and sends telemetry at 1kH/500Hz to GUI.
 
 ## Key Features
 - ICM-42688P initialization and read: `ICM42688P_Init`, `ICM42688P_read_dma`, `ICM42688P_decode`, `ICM42688P_GetData`
