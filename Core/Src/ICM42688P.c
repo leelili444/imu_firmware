@@ -132,7 +132,7 @@ uint8_t ICM42688P_read_dma(void)
 {
 	uint8_t tx_buf[15];
 	//uint8_t buf[15]; // 1 byte Dummy + 14 bytes data
-    tx_buf[0] = 0x1D | 0x80; // 最高位0表示读
+    tx_buf[0] = 0x1D | 0x80; // Set MSB=1 to indicate read
     Icm_CS_LOW();
     HAL_SPI_TransmitReceive_DMA(&hspi1, tx_buf, buf, 15);
     return 1;
@@ -149,19 +149,19 @@ uint8_t ICM42688P_decode(ICM42688P_Data_t *data){
     data->gyro_y = ICM42688P_ConvertGyro((int16_t)((buf[11] << 8) | buf[12]),ICM42688P_GYRO_500DPS_SENSITIVITY);
     data->gyro_z = ICM42688P_ConvertGyro((int16_t)((buf[13] << 8) | buf[14]),ICM42688P_GYRO_500DPS_SENSITIVITY);
 
-    // 1. 立即读取当前计数值
+    // 1. Read current counter value immediately
     uint16_t current_count = __HAL_TIM_GET_COUNTER(&htim1);
     uint16_t delta_us = 0;
-    // 2. 计算差值（考虑 16 位计数器溢出回环的情况）
+    // 2. Compute difference (handle 16-bit counter overflow/wraparound)
     if (current_count >= last_count) {
     	delta_us = current_count - last_count;
     } else {
-        // 发生溢出回环：(最大值 - 上一次) + 当前值 + 1
+        // Overflow/wraparound occurred: (max - last) + current + 1
         delta_us = (0xFFFF - last_count) + current_count + 1;
     }
 
 
-    // 3. 更新上一次的值，供下次使用
+    // 3. Update last value for next use
     last_count = current_count;
 
     data->dt = delta_us;
@@ -170,8 +170,6 @@ uint8_t ICM42688P_decode(ICM42688P_Data_t *data){
 
 uint8_t ICM42688P_GetData(ICM42688P_Data_t *data) {
 	ICM42688P_read_dma();
-
-    //ICM42688P_ReadRegs(MPUREG_TEMP_DATA0_UI, buf, 14);
 
 	ICM42688P_decode(&imudata);
     return 1;

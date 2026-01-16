@@ -5,17 +5,17 @@
 #include "stm32f4xx_hal.h"
 #include <stdint.h>
 
-// 强制 4 字节对齐
+// force 4-byte alignment
 #pragma pack(push, 4)
 typedef struct __attribute__((packed)){
     uint16_t header;      // 0x55AA
     uint8_t  msg_id;      // 0x01
-    uint8_t  data_len;    // 44 (负载长度)
+    uint8_t  data_len;    // paylod length 44 bytes
 
-    uint32_t counter;   // 【新增】硬件自增计数器 (偏移量 5-8)
+    uint32_t counter;   // incremental counter
     uint32_t dt; //us
 
-    // 数据负载 (36 字节)
+    // imu and euler data (36 bytes)
     float  ax;
     float  ay;
     float  az;
@@ -28,7 +28,7 @@ typedef struct __attribute__((packed)){
     float    pitch;
     float    yaw;
 
-    uint32_t crc32;       // 硬件 CRC32 校验码
+    uint32_t crc32;       // hardware CRC32
 } IMU_Frame_t;
 #pragma pack(pop)
 

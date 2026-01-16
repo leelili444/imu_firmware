@@ -10,10 +10,7 @@ extern FusionEuler euler;
 extern CRC_HandleTypeDef hcrc;
 extern ICM42688P_Data_t imudata;
 
-//// 宏定义：将变量放入 CCMRAM 区域
-//#define ATTRIBUTE_CCMRAM __attribute__((section(".ccmram")))
-
-// 双缓冲区设计 (Ping-Pong)
+// Double buffer design for DMA transmission
 IMU_Frame_t tx_buffers[2];
 uint8_t active_buf_idx = 0;
 volatile uint8_t dma_ready = 1;
@@ -21,18 +18,18 @@ uint32_t frame_tick = 0;
 uint16_t delta_us = 0;
 uint16_t delta_us2 = 0;
 /**
- * @brief 1kHz 遥测打包发送接口
+ * @brief 1kHz telemetry packet send interface
  */
 void Telemetry_Send_1kHz(ICM42688P_Data_t* imudata, FusionEuler* euler) {
-    // 1. 如果 DMA 忙，直接跳过这一帧，不阻塞 CPU
+    // 1. If DMA is busy, skip this frame without blocking the CPU
     if (dma_ready == 0) {
         return;
     }
 
-    // 2. 指向当前准备填充的缓冲区
+    // 2. Point to the buffer currently being filled
     IMU_Frame_t *p_pkt = &tx_buffers[active_buf_idx];
 
-    // 3. 填充模拟/真实数据
+    // 3. Fill packet with sensor data
     p_pkt->header = 0x55AA;
     p_pkt->msg_id = 0x01;
     p_pkt->data_len = 44;
@@ -48,27 +45,27 @@ void Telemetry_Send_1kHz(ICM42688P_Data_t* imudata, FusionEuler* euler) {
     p_pkt->pitch = euler->angle.pitch;
     p_pkt->yaw = euler->angle.yaw;
 
-    // 4. 手动 CRC 计算
+    // 4. Manual CRC calculation
     __HAL_CRC_DR_RESET(&hcrc);
     p_pkt->crc32 = HAL_CRC_Calculate(&hcrc, (uint32_t*)p_pkt, 7);
 
-    // 5. 准备发送：先置零标志位
+    // 5. Prepare to send: set flag to busy
     dma_ready = 0;
 
-    // 6. 启动发送，并检查返回值
+    // 6. Start transmission and check return value
     HAL_StatusTypeDef status = HAL_UART_Transmit_DMA(&huart1, (uint8_t*)p_pkt, sizeof(IMU_Frame_t));
 
     if (status != HAL_OK) {
-        // 如果发送失败（例如 HAL 报忙），必须把标志位拨回 1，否则系统会永久锁死
+        // If transmission fails (e.g., HAL reports busy), must set the flag back to 1, otherwise the system can deadlock
         dma_ready = 1;
     } else {
-        // 发送成功，切换到另一个缓冲区准备下一帧
+        // On success, switch to the other buffer for the next frame
         active_buf_idx = !active_buf_idx;
     }
 }
 
 /**
- * @brief DMA 传输完成回调 (需在串口中断中被调用)
+ * @brief DMA transfer complete callback (should be called from UART interrupt)
  */
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
     if (huart->Instance == USART1) {
@@ -85,28 +82,28 @@ void mavlinkTask(void *argument) {
 	const TickType_t xFrequency = pdMS_TO_TICKS(2); // 1ms = 1kHz
 
 	for(;;) {
-	    // 精确等时触发
+        // Precise periodic trigger
 	    vTaskDelayUntil(&xLastWakeTime, xFrequency);
-       // 假定数据已经在其它采样任务中准备好
+       // Assume data has been prepared in another sampling task
        Telemetry_Send_1kHz(&imudata, &euler);
-       // 1. 立即读取当前计数值
+       // 1. Read current counter value immediately
        uint16_t current_count = __HAL_TIM_GET_COUNTER(&htim1);
-       // 2. 计算差值（考虑 16 位计数器溢出回环的情况）
+       // 2. Compute difference (handle 16-bit counter overflow/wraparound)
        if (current_count >= last_count2) {
        	delta_us = current_count - last_count2;
        } else {
-           // 发生溢出回环：(最大值 - 上一次) + 当前值 + 1
+           // Overflow/wraparound occurred: (max - last) + current + 1
            delta_us = (0xFFFF - last_count2) + current_count + 1;
        }
        if(delta_us<1000){
 	   delta_us2 = delta_us;}
-       // 3. 更新上一次的值，供下次使用
+       // 3. Update last value for next use
        last_count2 = current_count;
     }
 
 }
 
-// 串口中断接收方式
+// UART receive callback (interrupt-based)
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 

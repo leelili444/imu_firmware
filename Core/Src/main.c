@@ -64,13 +64,6 @@ UART_HandleTypeDef huart1;
 DMA_HandleTypeDef hdma_usart1_rx;
 DMA_HandleTypeDef hdma_usart1_tx;
 
-/* Definitions for defaultTask */
-osThreadId_t defaultTaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
 /* Definitions for imuTask */
 osThreadId_t imuTaskHandle;
 const osThreadAttr_t imuTask_attributes = {
@@ -112,7 +105,6 @@ static void MX_CAN1_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_CRC_Init(void);
-void StartDefaultTask(void *argument);
 void StartImuTask(void *argument);
 void StartInsTask(void *argument);
 void StartMavTask(void *argument);
@@ -195,9 +187,6 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of defaultTask */
-  //defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
-
   /* creation of imuTask */
   imuTaskHandle = osThreadNew(StartImuTask, NULL, &imuTask_attributes);
 
@@ -631,12 +620,13 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 
-    // 释放信号量
+    // releasing the semaphore
     //xSemaphoreGiveFromISR(xImuDataReadySemaphore, &xHigherPriorityTaskWoken);
     //portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
   }
 }
-// 当 HAL_GPIO_EXTI_IRQHandler() 函数检测到中断后，会调用此回调
+// when HAL_GPIO_EXTI_IRQHandler() detects an interrupt on the specified pin,
+// it calls this callback function.
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -652,20 +642,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 }
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
-/**
-  * @brief  Function implementing the defaultTask thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
-{
-  /* USER CODE BEGIN 5 */
-
-  /* USER CODE END 5 */
-}
-
 /* USER CODE BEGIN Header_StartImuTask */
 /**
 * @brief Function implementing the imuTask thread.
@@ -675,19 +651,19 @@ void StartDefaultTask(void *argument)
 /* USER CODE END Header_StartImuTask */
 void StartImuTask(void *argument)
 {
-  /* USER CODE BEGIN StartImuTask */
+  /* USER CODE BEGIN 5 */
 	  /* Infinite loop */
 		for (;;) {
-			// --- 1. 等待中断通知 ---
-		    // ulTaskNotifyTake(pdTRUE, portMAX_DELAY) 会让任务阻塞在这里，
-		    // 直到被中断服务函数 (EXTI_IMU_Handler) 的 vTaskNotifyGiveFromISR() 唤醒。
-		    // pdTRUE 参数表示在唤醒后自动清除通知计数。
-		    // portMAX_DELAY 表示无限期等待，直到收到通知。
+			// --- 1. waiting for notification---
+		    // ulTaskNotifyTake(pdTRUE, portMAX_DELAY) will block the task，
+		    // untile woke up by vTaskNotifyGiveFromISR()。
+		    // pdTRUE means the notification value will be cleared to 0 upon exit.
+        // portMAX_DELAY means wait indefinitely.
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-	        // --- 2. 收到通知，立即读取原始数据 ---
+	        // --- 2. received notification and then read dma---
 			ICM42688P_read_dma();
-		    }
-  /* USER CODE END StartImuTask */
+		}
+  /* USER CODE END 5 */
 }
 
 /* USER CODE BEGIN Header_StartInsTask */
