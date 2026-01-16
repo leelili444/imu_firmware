@@ -7,10 +7,13 @@
 
 // 强制 4 字节对齐
 #pragma pack(push, 4)
-typedef struct {
+typedef struct __attribute__((packed)){
     uint16_t header;      // 0x55AA
     uint8_t  msg_id;      // 0x01
-    uint8_t  data_len;    // 36 (负载长度)
+    uint8_t  data_len;    // 44 (负载长度)
+
+    uint32_t counter;   // 【新增】硬件自增计数器 (偏移量 5-8)
+    uint32_t dt; //us
 
     // 数据负载 (36 字节)
     float  ax;

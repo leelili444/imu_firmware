@@ -17,8 +17,9 @@ extern ICM42688P_Data_t imudata;
 IMU_Frame_t tx_buffers[2];
 uint8_t active_buf_idx = 0;
 volatile uint8_t dma_ready = 1;
-
-
+uint32_t frame_tick = 0;
+uint16_t delta_us = 0;
+uint16_t delta_us2 = 0;
 /**
  * @brief 1kHz 遥测打包发送接口
  */
@@ -34,7 +35,9 @@ void Telemetry_Send_1kHz(ICM42688P_Data_t* imudata, FusionEuler* euler) {
     // 3. 填充模拟/真实数据
     p_pkt->header = 0x55AA;
     p_pkt->msg_id = 0x01;
-    p_pkt->data_len = 36;
+    p_pkt->data_len = 44;
+    p_pkt->counter = frame_tick++;
+    p_pkt->dt = delta_us;
     p_pkt->ax = imudata->accel_x;
     p_pkt->ay = imudata->accel_y;
     p_pkt->az = imudata->accel_z;
@@ -73,14 +76,13 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
     }
 }
 
-uint16_t delta_us = 0;
-uint16_t delta_us2 = 0;
+
 
 uint16_t last_count2 = 0;
 
 void mavlinkTask(void *argument) {
 	TickType_t xLastWakeTime = xTaskGetTickCount();
-	const TickType_t xFrequency = pdMS_TO_TICKS(1); // 1ms = 1kHz
+	const TickType_t xFrequency = pdMS_TO_TICKS(2); // 1ms = 1kHz
 
 	for(;;) {
 	    // 精确等时触发
