@@ -84,8 +84,16 @@ void mavlinkTask(void *argument) {
 	for(;;) {
         // Precise periodic trigger
 	    vTaskDelayUntil(&xLastWakeTime, xFrequency);
-       // Assume data has been prepared in another sampling task
-       Telemetry_Send_1kHz(&imudata, &euler);
+       // Make atomic local copies of shared sensor/pose data
+       ICM42688P_Data_t local_imu;
+       FusionEuler local_euler;
+       taskENTER_CRITICAL();
+       local_imu = imudata;
+       local_euler = euler;
+       taskEXIT_CRITICAL();
+
+       // Use local copies for send (prevents races with ISR/DMA or ins task)
+       Telemetry_Send_1kHz(&local_imu, &local_euler);
        // 1. Read current counter value immediately
        uint16_t current_count = __HAL_TIM_GET_COUNTER(&htim1);
        // 2. Compute difference (handle 16-bit counter overflow/wraparound)
