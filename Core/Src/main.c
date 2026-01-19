@@ -680,8 +680,22 @@ void StartInsTask(void *argument)
 	/* Infinite loop */
 	for(;;){
 		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-		GetPose(&imudata);
-        xQueueSend(imuQueHandle, &euler.angle, 0);
+		// Atomic copy of shared imudata to local structure
+        ICM42688P_Data_t local_imu;
+        taskENTER_CRITICAL();
+        local_imu = imudata;
+        taskEXIT_CRITICAL();
+
+        // Use the local copy for pose calculation
+        GetPose(&local_imu);
+
+        // Atomically copy euler before sending
+        FusionEuler local_euler;
+        taskENTER_CRITICAL();
+        local_euler = euler;
+        taskEXIT_CRITICAL();
+
+        xQueueSend(imuQueHandle, &local_euler.angle, 0);
 	}
   /* USER CODE END StartInsTask */
 }
