@@ -20,7 +20,7 @@ uint16_t delta_us2 = 0;
 /**
  * @brief 1kHz telemetry packet send interface
  */
-void Telemetry_Send_1kHz(ICM42688P_Data_t* imudata, FusionEuler* euler) {
+void Telemetry_Send(ICM42688P_Data_t* imudata, FusionEuler* euler) {
     // 1. If DMA is busy, skip this frame without blocking the CPU
     if (dma_ready == 0) {
         return;
@@ -93,7 +93,7 @@ void mavlinkTask(void *argument) {
        taskEXIT_CRITICAL();
 
        // Use local copies for send (prevents races with ISR/DMA or ins task)
-       Telemetry_Send_1kHz(&local_imu, &local_euler);
+       Telemetry_Send(&local_imu, &local_euler);
        // 1. Read current counter value immediately
        uint16_t current_count = __HAL_TIM_GET_COUNTER(&htim1);
        // 2. Compute difference (handle 16-bit counter overflow/wraparound)
