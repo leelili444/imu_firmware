@@ -70,20 +70,42 @@ uint8_t ICM42688P_WriteReg(uint8_t reg, uint8_t value)
  */
 void ICM42688P_Init(void)
 {
-	/* (1) wait 50ms for the sensor to power up completely */
+	uint8_t use_external_clk =  0;
     HAL_Delay(50);
-    /* (2) soft reset */
-    // select Bank 0
-    ICM42688P_WriteReg(MPUREG_REG_BANK_SEL, 0);
-    // soft reset
-    uint8_t data = ICM426XX_DEVICE_CONFIG_RESET_EN;
-    ICM42688P_WriteReg(MPUREG_DEVICE_CONFIG, data);
-    HAL_Delay(50);
+
+	if(use_external_clk){
+		/* (0) wait 50ms for the sensor to power up completely */
+		    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_SET);
+		    HAL_Delay(200);
+
+		    /* (1) select Bank 1 and configure INTF_CONFIG5_B1 register
+		     to enable CLKIN mode of IMU's Pin 9 */
+		    ICM42688P_WriteReg(MPUREG_REG_BANK_SEL, 1);
+
+		    uint8_t intf_config5 = 0x00; // clear all bits
+		    intf_config5 |= (0x02 << 1);  // bit[2:1] = 0b10
+		    ICM42688P_WriteReg(MPUREG_INTF_CONFIG5_B1, intf_config5);// enable CLKIN mode
+
+
+		    /* (2). select Bank 0 and configure INTF_CONFIG1 register to enable RTC mode
+		    to use external 32.768kHz clock*/
+		    ICM42688P_WriteReg(MPUREG_REG_BANK_SEL, 0);
+		    uint8_t val = ICM42688P_ReadReg(MPUREG_INTF_CONFIG1);
+		    val &= ~0x03; // clear CLKSEL bits
+		    val |= 0x01;  // set CLKSEL = 01
+		    val |=(1 << 2); // set RTC_MODE bit to 1
+		    ICM42688P_WriteReg(MPUREG_INTF_CONFIG1, val);
+		    HAL_Delay(200);// wait for clock to stabilize
+	}
+
+
     /* (3) check Device ID*/
+    ICM42688P_WriteReg(MPUREG_REG_BANK_SEL, 0);
+
     uint8_t who_am_i = ICM42688P_ReadReg(MPUREG_WHO_AM_I);
     if (who_am_i != ICM_WHOAMI) {
         while(1){
-      	  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_2);
+      	  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_2);// red led
           	 HAL_Delay(10);
         };
     }
@@ -100,7 +122,7 @@ void ICM42688P_Init(void)
     /* (6) Disable FIFO stream*/
     // select Bank 0
     ICM42688P_WriteReg(MPUREG_REG_BANK_SEL, 0);
-    data = ICM426XX_FIFO_CONFIG_MODE_BYPASS;
+    uint8_t data = ICM426XX_FIFO_CONFIG_MODE_BYPASS;
     ICM42688P_WriteReg(MPUREG_FIFO_CONFIG, data);
     /* (7) Configure the interrupt mode*/
     // -set pulse mode -- the INT1 pin generates a short, fixed-duration pulse upon an interrupt event.
