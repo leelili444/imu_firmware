@@ -34,3 +34,7 @@ This project implements STM32F4 support for the ICM-42688P sensor, runs AHRS/INS
 ## Common Types & Entry Points
 - Sensor data struct: `ICM42688P_Data_t` (`Core/Inc/ICM42688P.h`)  
 - Telemetry frame struct: `IMU_Frame_t` (`Core/Inc/mav_task.h`)
+
+## License
+![oshw_facts](https://github.com/user-attachments/assets/26a4d4e9-98e0-443d-9b23-0295b0acb433)
+
